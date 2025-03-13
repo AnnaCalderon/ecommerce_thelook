@@ -1,0 +1,251 @@
+---
+title: "Data Exploration"
+editor: visual
+---
+
+```{r}
+#| echo: false 
+#| include: false
+
+library(tidyverse)
+library(gt)
+```
+
+Products and Distribution Centers
+
+```{r}
+distribution_centers <- read.csv("data/distribution_centers_thelook.csv")
+distribution_centers %>% head(10)
+
+products <- read.csv("data/products.csv") %>% 
+      mutate(center = case_when(
+    distribution_center_id==1 ~ "Memphis",
+    distribution_center_id==2 ~ "Chicago",
+    distribution_center_id==3 ~ "Houston", 
+    distribution_center_id==4 ~ "Los Angeles",
+    distribution_center_id==5 ~ "New Orleans", 
+    distribution_center_id==6 ~ "Port Authority NY/NJ",
+    distribution_center_id==7 ~ "Philadelphia",
+    distribution_center_id==8 ~ "Mobile", 
+    distribution_center_id==9 ~ "Charleston",
+    distribution_center_id==10 ~ "Savannah"
+  ))
+
+products %>% head(10)
+```
+
+```{r}
+
+
+# Aggregate data
+data_summary <- products %>%
+  group_by(center, category) %>%
+  summarise(count = n(), .groups = 'drop')
+
+
+# Pivot the table wider
+wide_data <- data_summary %>%
+  pivot_wider(
+    names_from = center,        # Columns are created from the "center" variable
+    values_from = count,        # Values are taken from the "count" variable
+    values_fill = 0             # Fill missing values with 0
+  )
+
+# Create a pretty table 
+pretty_wide_table <- wide_data %>%
+  gt() %>%
+  tab_header(
+    title = "Count of Each Category by Center",
+  ) %>%
+  cols_label(
+    category = "Product Category"
+  ) %>%
+  tab_options(
+    table.font.size = 12,
+    heading.title.font.size = 16,
+    heading.subtitle.font.size = 14,
+    table.border.top.color = "#D3D3D3",
+    table.border.bottom.color = "#D3D3D3"
+  ) %>%
+  data_color(
+    columns = Charleston:Savannah,
+    colors = scales::col_numeric(palette = c("#FFDDC1", "#FF9F40"), domain = NULL)
+  ) %>%
+  fmt_number(
+    columns = Charleston:Savannah,
+    decimals = 0
+  )
+
+# Display the table
+pretty_wide_table
+
+```
+
+Events
+
+```{r}
+events <- read.csv("data/events.csv")
+events %>% head(10)
+
+table(events$event_type)
+```
+
+```{r}
+
+ggplot(events, aes(x = traffic_source)) +
+  geom_bar(fill = "#FF9F40", color = "black") +  # Fill color and border color
+  labs(title = "Events: Distribution of Traffic Source", 
+       x = "", 
+       y = "Frequency") +
+  theme_minimal()  # Use a minimal theme for clean visualization
+
+
+```
+
+```{r}
+
+
+
+filtered_events <- events %>%
+  group_by(user_id) %>%
+  filter(sequence_number == max(sequence_number)) %>%
+  ungroup() %>% 
+  select(sequence_number, event_type)
+
+# Convert columns to factors
+filtered_events$sequence_number <- as.factor(filtered_events$sequence_number)
+filtered_events$event_type <- as.factor(filtered_events$event_type)
+
+# Create a complete grid of all combinations of sequence_number (1–13) and event_type
+all_combinations <- expand.grid(
+  sequence_number = factor(1:13), # Ensure sequence_number is a factor from 1 to 13
+  event_type = levels(filtered_events$event_type) # Use all unique event types
+)
+
+# Count occurrences of each combination in the original data
+df_summary <- filtered_events %>%
+  group_by(sequence_number, event_type) %>%
+  summarise(count = n(), .groups = 'drop')
+
+# Join the original data with the complete grid
+df_complete <- all_combinations %>%
+  left_join(df_summary, by = c("sequence_number", "event_type")) %>%
+  mutate(count = ifelse(is.na(count), 0, count)) # Replace NA counts with 0
+
+# Calculate proportions for each sequence_number
+df_summary <- df_complete %>%
+  group_by(sequence_number) %>%
+  mutate(proportion = count / sum(count)) # Normalize counts to proportions
+
+# Step 4: Create the bar chart with proportions
+ggplot(df_summary, aes(x = sequence_number, y = proportion, fill = event_type)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) + # Stacked bars
+  geom_text(aes(label = ifelse(proportion > 0, scales::percent(proportion), "")), 
+            position = position_stack(vjust = 0.5), size = 3) + # Add percentage labels
+  labs(title = "Proportions of Event Types by Sequence Number",
+       x = "Sequence Number",
+       y = "Proportion",
+       fill = "Event Type") +
+  scale_fill_brewer(palette = "Set2") + # Use a colorblind-friendly palette
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x-axis labels for readability
+```
+
+```{r}
+events_purchase <- events %>%
+  filter(event_type=="purchase") %>% 
+  mutate(
+    # Parse the timestamp into a proper date-time object
+    timestamp_parsed = ymd_hms(created_at),
+    
+    # # Extract time (hour:minute:second)
+    # time = format(timestamp_parsed, "%H:%M:%S"),
+    
+    # Extract day of the week as the full name (e.g., "Monday")
+    day_of_week = wday(timestamp_parsed, label = TRUE, abbr = FALSE),
+    
+    # Extract month as abbreviated name (e.g., "Jan")
+    month_name = month(timestamp_parsed, label = TRUE)
+  )
+
+# Process the data
+processed_data <- events_purchase %>%
+  group_by(day_of_week) %>%
+  summarise(count = n()) %>% # Count transactions per day
+  mutate(
+    percentage = (count / sum(count)) * 100 # Calculate percentage
+  ) %>%
+  arrange(match(day_of_week, c("Monday", "Tuesday", "Wednesday", 
+                               "Thursday", "Friday", "Saturday", "Sunday"))) # Order days
+
+# Define shades of orange
+orange_shades <- c("#FFA500", "#FFB347", "#FFC28D", "#FFD7B3", "#FFE6CC", "#FFF2E6", "#FFFFF0")
+
+# Create the pie chart
+ggplot(processed_data, aes(x = "", y = percentage, fill = day_of_week)) +
+  geom_bar(stat = "identity", width = 1, show.legend = FALSE) + # Bar chart transformed to pie
+  coord_polar(theta = "y") + # Transform to pie chart
+  geom_text(aes(label = paste0(paste(day_of_week, round(percentage, 1), sep = "\n"), "%")), 
+            position = position_stack(vjust = 0.5), size = 4) + # Labels with day names and percentages
+  scale_fill_manual(values = setNames(orange_shades, processed_data$day_of_week)) + # Shades of orange
+  labs(title = "Popular Days for Purchase",
+       x = NULL,
+       y = NULL) +
+  theme_void() + # Remove background and gridlines
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold") # Centered title
+  )
+```
+
+```{r}
+inventory_items <- read.csv("data/inventory_items.csv")
+inventory_items %>% head(10)
+
+#unique(inventory_items$id) #all unique users 
+
+# product categories are: Accessories & Active 
+inventory_items %>% 
+  group_by(product_category) %>% 
+  summarise(
+    count_product_category = n()
+  )
+
+inventory_items %>% 
+  group_by(product_brand) %>% 
+  summarise(
+    count_product_brand = n()
+  ) %>% 
+  arrange(desc(count_product_brand))
+```
+
+```{r}
+order_items <- read.csv("data/order_items.csv")
+order_items %>% head(10)
+
+table(order_items$status)
+```
+
+```{r}
+orders <- read.csv("data/orders.csv")
+orders %>% head(10)
+
+# Stacked bar plot
+ggplot(orders, aes(x = status, fill = gender)) +
+  geom_bar(position = "stack") +  # Default is "stack"
+  labs(title = "Order Status by gender",
+       x = "Status",
+       y = "Count",
+       fill = "Category 2") +
+  theme_minimal()
+```
+
+```{r}
+
+
+
+users <- read.csv("data/users.csv") %>% 
+  rename(user_id = id) %>% 
+  select(-first_name, -last_name, -email, )
+
+table(users$traffic_source)
+```

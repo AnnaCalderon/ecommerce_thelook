@@ -1,0 +1,22 @@
+project:
+  type: website
+
+website:
+  title: "Ecommerce Project"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Presentation
+      - href: data_exploration.qmd
+        text: Exploration
+      - href: process.qmd
+        text: Process
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
+
+
+
