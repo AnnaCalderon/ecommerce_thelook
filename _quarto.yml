@@ -8,7 +8,7 @@ website:
     left:
       - href: index.qmd
         text: Presentation
-      - href: data_exploration.qmd
+      - href: data_exploration2.qmd
         text: Exploration
       - href: process.qmd
         text: Process
