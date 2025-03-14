@@ -3,12 +3,17 @@ title: "Data Exploration"
 editor: visual
 ---
 
+
 ```{r}
 #| echo: false 
 #| include: false
 
 library(tidyverse)
 library(gt)
+library(dplyr)
+library(forcats)
+library(lubridate)
+
 ```
 
 Products and Distribution Centers
